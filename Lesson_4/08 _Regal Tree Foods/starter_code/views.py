@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy import create_engine
 
-from flask.ext.httpauth import HTTPBasicAuth
+from flask_httpauth import HTTPBasicAuth
 auth = HTTPBasicAuth()
 
 
@@ -19,12 +19,23 @@ app = Flask(__name__)
 
 
 #ADD @auth.verify_password decorator here
-
+@auth.verify_password
+def verify_password(username_or_token, password):
+    user_id = User.verify_auth_token(username_or_token)
+    if user_id:
+        user = session.query(User).filter_by(id = user_id).one()
+    else:
+        user = session.query(User).filter_by(username = username_or_token).first()
+        return False
+    g.user = users
+    return True
 
 #add /token route here to get a token for a user with login credentials
-
-
-
+@app.route('/token')
+@auth.login_required
+def get_auth_token():
+    token = g.user.generate_auth_token()
+    return jsonify({'token': token.decode('ascii')})
 
 @app.route('/users', methods = ['POST'])
 def new_user():
@@ -32,13 +43,13 @@ def new_user():
     password = request.json.get('password')
     if username is None or password is None:
         print "missing arguments"
-        abort(400) 
-        
+        abort(400)
+
     if session.query(User).filter_by(username = username).first() is not None:
         print "existing user"
         user = session.query(User).filter_by(username=username).first()
         return jsonify({'message':'user already exists'}), 200#, {'Location': url_for('get_user', id = user.id, _external = True)}
-        
+
     user = User(username = username)
     user.hash_password(password)
     session.add(user)
@@ -86,7 +97,7 @@ def showCategoriedProducts(category):
     if category == 'vegetable':
         vegetable_items = session.query(Product).filter_by(category = 'vegetable').all()
         return jsonify(produce_products = [p.serialize for p in produce_items])
-    
+
 
 
 if __name__ == '__main__':
